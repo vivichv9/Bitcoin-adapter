@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bitcoin Adapter</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <details class="rpc-popover" id="rpc-popover">
+      <summary>RPC</summary>
+      <div class="rpc-popover-body">
+        <h3>RPC Node Config</h3>
+        <form id="rpc-config-form" novalidate>
+          <label>
+            Protocol
+            <select id="rpc-protocol" name="rpc-protocol">
+              <option value="http">http</option>
+              <option value="https">https</option>
+            </select>
+          </label>
+          <label>
+            Host
+            <input id="rpc-host" name="rpc-host" value="127.0.0.1" />
+          </label>
+          <label>
+            Port
+            <input id="rpc-port" name="rpc-port" type="number" min="1" max="65535" value="18443" />
+          </label>
+          <label>
+            Username
+            <input id="rpc-username" name="rpc-username" value="bitcoinrpc" />
+          </label>
+          <label>
+            Password
+            <input id="rpc-password" name="rpc-password" type="password" />
+          </label>
+          <label>
+            Wallet (optional)
+            <input id="rpc-wallet" name="rpc-wallet" placeholder="wallet name" />
+          </label>
+          <button id="save-rpc-config" type="submit">Сохранить RPC конфиг</button>
+        </form>
+        <div id="rpc-config-errors" class="errors" aria-live="polite"></div>
+      </div>
+    </details>
+
+    <main class="app">
+      <header class="hero">
+        <h1>Bitcoin Adapter</h1>
+        <p>Левая часть: заполнение транзакции. Правая часть: действия с блокчейном и история запросов.</p>
+      </header>
+
+      <section class="workspace">
+        <article class="panel left-column">
+          <h2>Заполнение транзакции</h2>
+          <form id="hex-form" novalidate>
+            <label>
+              Тип формы
+              <select id="mode" name="mode">
+                <option value="raw_tx">Raw TX (unsigned, 1-in/1-out)</option>
+                <option value="op_return">OP_RETURN payload</option>
+              </select>
+            </label>
+
+            <div id="raw-tx-fields" class="fields">
+              <label>
+                Prev TxID (hex, 64)
+                <input id="txid" name="txid" placeholder="32 байта, пример: 001122...eeff" autocomplete="off" />
+                <small class="hint">Формат: строго 64 hex-символа (0-9, a-f).</small>
+              </label>
+              <label>
+                Vout
+                <input id="vout" name="vout" type="number" min="0" value="0" />
+                <small class="hint">Индекс выхода предыдущей транзакции, целое число от 0.</small>
+              </label>
+              <label>
+                Amount (sats)
+                <input id="amountSats" name="amountSats" type="number" min="1" value="1000" />
+                <small class="hint">Сумма в сатоши, только целые положительные значения.</small>
+              </label>
+              <label>
+                scriptPubKey (hex)
+                <input id="scriptPubKey" name="scriptPubKey" placeholder="пример P2PKH: 76a914...88ac" autocomplete="off" />
+                <small class="hint">Hex-скрипт с четной длиной, например locking script output.</small>
+              </label>
+            </div>
+
+            <div id="op-return-fields" class="fields hidden">
+              <label>
+                Текст payload
+                <textarea id="payloadText" name="payloadText" rows="3" placeholder="Данные для OP_RETURN"></textarea>
+                <small class="hint">До 80 байт в UTF-8 для OP_RETURN.</small>
+              </label>
+            </div>
+
+            <button type="submit">Сгенерировать hex</button>
+          </form>
+
+          <div id="errors" class="errors" aria-live="polite"></div>
+
+          <div class="result">
+            <h3>Итоговый hex</h3>
+            <textarea id="hex-output" readonly rows="8"></textarea>
+            <div class="result-actions">
+              <button id="copy-hex" type="button">Копировать</button>
+            </div>
+          </div>
+
+          <div class="result">
+            <h3>Пример bitcoin-cli</h3>
+            <pre id="rpc-output"></pre>
+          </div>
+        </article>
+
+        <section class="right-column">
+          <article class="panel right-top">
+            <h2>Взаимодействие с блокчейном</h2>
+
+            <div class="stack">
+              <div class="action-card">
+                <h3>RPC Actions</h3>
+                <form id="generateblock-form" novalidate>
+                  <label>
+                    Адрес для generateblock
+                    <input id="generateblock-address" name="generateblock-address" placeholder="bcrt1... или другой адрес сети" />
+                  </label>
+                  <button id="generateblock-btn" type="submit">Вызвать generateblock</button>
+                </form>
+                <button id="sendraw-btn" type="button">Вызвать sendrawtransaction (hex из левой панели)</button>
+                <div id="rpc-action-errors" class="errors" aria-live="polite"></div>
+                <pre id="rpc-action-result"></pre>
+              </div>
+
+              <div class="action-card">
+                <h3>Проверка подписи транзакции</h3>
+                <form id="tx-signature-check-form" novalidate>
+                  <label>
+                    Signed raw tx (hex)
+                    <textarea
+                      id="signed-rawtx-hex"
+                      name="signed-rawtx-hex"
+                      rows="4"
+                      placeholder="Вставьте подписанную raw-транзакцию в hex"
+                    ></textarea>
+                    <small class="hint">Проверка выполняется через testmempoolaccept.</small>
+                  </label>
+                  <label>
+                    Max fee rate (optional, BTC/kvB)
+                    <input id="signature-maxfeerate" name="signature-maxfeerate" placeholder="например 0.1" />
+                  </label>
+                  <button type="submit">Проверить подпись транзакции</button>
+                </form>
+                <div id="tx-signature-errors" class="errors" aria-live="polite"></div>
+                <pre id="tx-signature-result"></pre>
+              </div>
+
+              <div class="action-card">
+                <h3>Типы скриптов по публичному ключу</h3>
+                <form id="pubkey-form" novalidate>
+                  <label>
+                    Public key (hex)
+                    <input id="pubkey" name="pubkey" placeholder="02... или 04..." />
+                    <small class="hint">Поддерживаются compressed (33 байта) и uncompressed (65 байт) ключи.</small>
+                  </label>
+                  <button type="submit">Показать варианты</button>
+                </form>
+                <div id="pubkey-errors" class="errors" aria-live="polite"></div>
+                <div class="result-actions">
+                  <button id="script-export-json" type="button">Экспорт JSON</button>
+                  <button id="script-export-txt" type="button">Экспорт TXT</button>
+                </div>
+                <pre id="script-types-output"></pre>
+              </div>
+
+              <div class="action-card">
+                <h3>Генерация адресов (RPC deriveaddresses)</h3>
+                <form id="address-generate-form" novalidate>
+                  <label>
+                    Public key (hex)
+                    <input id="address-pubkey" name="address-pubkey" placeholder="02... или 04..." />
+                    <small class="hint">Типы: P2PKH, P2WPKH, P2SH-P2WPKH, P2PK, P2TR.</small>
+                  </label>
+                  <button type="submit">Сгенерировать адреса</button>
+                </form>
+                <div id="address-generate-errors" class="errors" aria-live="polite"></div>
+                <pre id="address-generate-output"></pre>
+              </div>
+
+              <div class="action-card">
+                <h3>Проверка адреса (RPC validateaddress)</h3>
+                <form id="address-validate-form" novalidate>
+                  <label>
+                    Bitcoin address
+                    <input id="address-to-validate" name="address-to-validate" placeholder="bc1... / 1... / 3..." />
+                  </label>
+                  <button type="submit">Проверить адрес</button>
+                </form>
+                <div id="address-validate-errors" class="errors" aria-live="polite"></div>
+                <pre id="address-validate-output"></pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel right-bottom">
+            <h2>История запросов</h2>
+            <div class="result-actions">
+              <button id="history-export-json" type="button">Экспорт истории JSON</button>
+              <button id="history-clear" type="button">Очистить историю</button>
+            </div>
+            <small class="hint">В истории маскируются чувствительные поля и не сохраняется RPC-пароль.</small>
+            <pre id="history-output"></pre>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
